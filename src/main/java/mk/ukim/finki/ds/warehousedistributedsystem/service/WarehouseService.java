@@ -23,6 +23,7 @@ public class WarehouseService {
     private final InventoryRepository inventoryRepository;
     private final KafkaTemplate<String, AvailabilityCheckedEvent> kafkaTemplate;
     private final Tracer tracer;
+    private static final String RESPONSE_TOPIC = "availability-response";
 
     @Value("${warehouse.region}")
     private String region;
@@ -33,7 +34,7 @@ public class WarehouseService {
     public void handleOrderPlaced(OrderPlacedEvent orderPlacedEvent) {
         Span span = tracer.spanBuilder("warehouse.handleOrder")
                 .setAttribute("order.id", orderPlacedEvent.getOrderId())
-                .setAttribute("warehouse.region0", region)
+                .setAttribute("warehouse.region", region)
                 .startSpan();
         try(var scope = span.makeCurrent()) {
             boolean available = checkInventory(orderPlacedEvent);
@@ -46,7 +47,7 @@ public class WarehouseService {
                     eta
             );
 
-            kafkaTemplate.send(responseTopic, response);
+            kafkaTemplate.send(RESPONSE_TOPIC, orderPlacedEvent.getOrderId(), response);
             span.addEvent("response.published", Attributes.of(AttributeKey.booleanKey("available"), available));
         } finally {
             span.end();
