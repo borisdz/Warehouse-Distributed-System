@@ -1,6 +1,5 @@
 package mk.ukim.finki.ds.warehousedistributedsystem.config;
 
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import mk.ukim.finki.ds.contracts.events.OrderPlacedEvent;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
