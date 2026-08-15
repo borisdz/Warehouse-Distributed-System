@@ -1,11 +1,10 @@
 package mk.ukim.finki.ds.warehousedistributedsystem.service;
 
 import lombok.extern.slf4j.Slf4j;
-import mk.ukim.finki.ds.warehousedistributedsystem.events.OrderPlacedEvent;
+import mk.ukim.finki.ds.contracts.events.OrderPlacedEvent;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
-import lombok.Data;
 import lombok.RequiredArgsConstructor;
 
 @Component
