@@ -5,16 +5,17 @@ import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
 import lombok.RequiredArgsConstructor;
-import mk.ukim.finki.ds.warehousedistributedsystem.events.AvailabilityCheckedEvent;
-import mk.ukim.finki.ds.warehousedistributedsystem.events.OrderPlacedEvent;
+import mk.ukim.finki.ds.contracts.events.AvailabilityCheckedEvent;
+import mk.ukim.finki.ds.contracts.events.OrderPlacedEvent;
+import mk.ukim.finki.ds.contracts.model.OrderItem;
 import mk.ukim.finki.ds.warehousedistributedsystem.model.Inventory;
-import mk.ukim.finki.ds.warehousedistributedsystem.model.OrderItem;
 import mk.ukim.finki.ds.warehousedistributedsystem.repository.InventoryRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
-import javax.swing.*;
+import java.time.Instant;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -23,7 +24,6 @@ public class WarehouseService {
     private final InventoryRepository inventoryRepository;
     private final KafkaTemplate<String, AvailabilityCheckedEvent> kafkaTemplate;
     private final Tracer tracer;
-    private static final String RESPONSE_TOPIC = "availability-response";
 
     @Value("${warehouse.region}")
     private String region;
@@ -41,13 +41,18 @@ public class WarehouseService {
             int eta = available ? 2 : 0;
 
             AvailabilityCheckedEvent response = new AvailabilityCheckedEvent(
+                    UUID.randomUUID().toString(),
+                    AvailabilityCheckedEvent.CURRENT_VERSION,
+                    Instant.now(),
+                    orderPlacedEvent.getCorrelationId(),
                     orderPlacedEvent.getOrderId(),
+                    region,
                     region,
                     available,
                     eta
             );
 
-            kafkaTemplate.send(RESPONSE_TOPIC, orderPlacedEvent.getOrderId(), response);
+                kafkaTemplate.send(responseTopic, orderPlacedEvent.getOrderId(), response);
             span.addEvent("response.published", Attributes.of(AttributeKey.booleanKey("available"), available));
         } finally {
             span.end();
