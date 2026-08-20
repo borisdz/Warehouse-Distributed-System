@@ -1,10 +1,11 @@
 FROM eclipse-temurin:17-jdk-alpine AS build
 WORKDIR /app
-COPY .mvn/ .mvn
-COPY mvnw pom.xml ./
+COPY Warehouse-Distributed-System/.mvn/ .mvn
+COPY Warehouse-Distributed-System/mvnw Warehouse-Distributed-System/pom.xml ./
 RUN sed -i 's/\r$//' mvnw && chmod +x mvnw
-RUN ./mvnw dependency:go-offline
-COPY src ./src
+COPY Distributed-System-Contracts /contracts
+RUN ./mvnw -f /contracts/pom.xml install -DskipTests
+COPY Warehouse-Distributed-System/src ./src
 RUN ./mvnw clean package -DskipTests
 
 FROM eclipse-temurin:17-jre-alpine
