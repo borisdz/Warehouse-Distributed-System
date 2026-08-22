@@ -5,8 +5,11 @@ import mk.ukim.finki.ds.contracts.events.OrderPlacedEvent;
 import mk.ukim.finki.ds.warehousedistributedsystem.model.ProcessedWarehouseEvent;
 import mk.ukim.finki.ds.warehousedistributedsystem.repository.ProcessedWarehouseEventRepository;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Objects;
 
 import lombok.RequiredArgsConstructor;
 
@@ -23,20 +26,21 @@ public class OrderPlacedListener {
         containerFactory = "kafkaListenerContainerFactory"
     )
     @Transactional
-    public void onOrderPlaced(OrderPlacedEvent event){
+    public void onOrderPlaced(@NonNull OrderPlacedEvent event){
         log.info("Received OrderPlacedEvent: orderId={}, region={}",
                 event.getOrderId(), event.getCustomerRegion());
 
-        if (processedEventRepository.existsById(event.getEventId())) {
-            log.info("Ignoring duplicate OrderPlacedEvent: eventId={}", event.getEventId());
+        String eventId = Objects.requireNonNull(event.getEventId(), "eventId");
+        if (processedEventRepository.existsById(eventId)) {
+            log.info("Ignoring duplicate OrderPlacedEvent: eventId={}", eventId);
             return;
         }
 
-        processedEventRepository.save(ProcessedWarehouseEvent.builder()
-                .eventId(event.getEventId())
+        processedEventRepository.save(Objects.requireNonNull(ProcessedWarehouseEvent.builder()
+                .eventId(eventId)
                 .orderId(event.getOrderId())
                 .warehouseRegion(event.getCustomerRegion())
-                .build());
+            .build()));
         warehouseService.handleOrderPlaced(event);
     }
 }
