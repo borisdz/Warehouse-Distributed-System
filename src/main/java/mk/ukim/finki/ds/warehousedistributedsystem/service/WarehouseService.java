@@ -9,10 +9,13 @@ import mk.ukim.finki.ds.contracts.events.AvailabilityCheckedEvent;
 import mk.ukim.finki.ds.contracts.events.OrderPlacedEvent;
 import mk.ukim.finki.ds.contracts.model.OrderItem;
 import mk.ukim.finki.ds.warehousedistributedsystem.model.Inventory;
+import mk.ukim.finki.ds.warehousedistributedsystem.model.InventoryReservation;
+import mk.ukim.finki.ds.warehousedistributedsystem.repository.InventoryReservationRepository;
 import mk.ukim.finki.ds.warehousedistributedsystem.repository.InventoryRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -22,6 +25,7 @@ import java.util.UUID;
 public class WarehouseService {
 
     private final InventoryRepository inventoryRepository;
+    private final InventoryReservationRepository reservationRepository;
     private final KafkaTemplate<String, AvailabilityCheckedEvent> kafkaTemplate;
     private final Tracer tracer;
 
@@ -31,13 +35,14 @@ public class WarehouseService {
     @Value("${warehouse.response-topic}")
     private String responseTopic;
 
+    @Transactional
     public void handleOrderPlaced(OrderPlacedEvent orderPlacedEvent) {
         Span span = tracer.spanBuilder("warehouse.handleOrder")
                 .setAttribute("order.id", orderPlacedEvent.getOrderId())
                 .setAttribute("warehouse.region", region)
                 .startSpan();
         try(var scope = span.makeCurrent()) {
-            boolean available = checkInventory(orderPlacedEvent);
+            boolean available = reserveInventory(orderPlacedEvent.getOrderId(), orderPlacedEvent.getItems());
             int eta = available ? 2 : 0;
 
             AvailabilityCheckedEvent response = new AvailabilityCheckedEvent(
@@ -59,12 +64,30 @@ public class WarehouseService {
         }
     }
 
-    private boolean checkInventory(OrderPlacedEvent orderPlacedEvent) {
-        for (OrderItem item : orderPlacedEvent.getItems()) {
-            Inventory inv = inventoryRepository.findById(item.getProductId()).orElse(new Inventory(item.getProductId(), 0));
-            if (inv.getStock() < item.getQuantity()) {
+    private boolean reserveInventory(String orderId, java.util.List<OrderItem> items) {
+        java.util.List<Inventory> inventories = items.stream()
+                .map(item -> inventoryRepository.findByProductIdForUpdate(item.getProductId()).orElse(null))
+                .toList();
+        for (int index = 0; index < items.size(); index++) {
+            Inventory inventory = inventories.get(index);
+            if (inventory == null
+                    || inventory.getStock() - inventory.getReserved() < items.get(index).getQuantity()) {
                 return false;
             }
+        }
+
+        for (int index = 0; index < items.size(); index++) {
+            OrderItem item = items.get(index);
+            Inventory inventory = inventories.get(index);
+            inventory.setReserved(inventory.getReserved() + item.getQuantity());
+            inventoryRepository.save(inventory);
+            reservationRepository.save(InventoryReservation.builder()
+                    .orderId(orderId)
+                    .productId(item.getProductId())
+                    .quantityReserved(item.getQuantity())
+                    .reservedAt(Instant.now())
+                    .status("RESERVED")
+                    .build());
         }
         return true;
     }
