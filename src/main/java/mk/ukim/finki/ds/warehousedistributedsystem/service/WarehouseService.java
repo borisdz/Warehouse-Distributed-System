@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -41,7 +42,7 @@ public class WarehouseService {
                 .setAttribute("order.id", orderPlacedEvent.getOrderId())
                 .setAttribute("warehouse.region", region)
                 .startSpan();
-        try(var scope = span.makeCurrent()) {
+        try (var scope = span.makeCurrent()) {
             boolean available = reserveInventory(orderPlacedEvent.getOrderId(), orderPlacedEvent.getItems());
             int eta = available ? 2 : 0;
 
@@ -54,10 +55,12 @@ public class WarehouseService {
                     region,
                     region,
                     available,
-                    eta
-            );
+                    eta);
 
-                kafkaTemplate.send(responseTopic, orderPlacedEvent.getOrderId(), response);
+            kafkaTemplate.send(
+                    Objects.requireNonNull(responseTopic, "responseTopic must not be null"),
+                    Objects.requireNonNull(orderPlacedEvent.getOrderId(), "orderId must not be null"),
+                    response);
             span.addEvent("response.published", Attributes.of(AttributeKey.booleanKey("available"), available));
         } finally {
             span.end();
@@ -81,13 +84,15 @@ public class WarehouseService {
             Inventory inventory = inventories.get(index);
             inventory.setReserved(inventory.getReserved() + item.getQuantity());
             inventoryRepository.save(inventory);
-            reservationRepository.save(InventoryReservation.builder()
-                    .orderId(orderId)
-                    .productId(item.getProductId())
-                    .quantityReserved(item.getQuantity())
-                    .reservedAt(Instant.now())
-                    .status("RESERVED")
-                    .build());
+            reservationRepository.save(
+                    Objects.requireNonNull(
+                            InventoryReservation.builder()
+                                    .orderId(orderId)
+                                    .productId(item.getProductId())
+                                    .quantityReserved(item.getQuantity())
+                                    .reservedAt(Instant.now())
+                                    .status("RESERVED")
+                                    .build()));
         }
         return true;
     }
